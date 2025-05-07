@@ -1,7 +1,10 @@
 use bevy::prelude::*;
 
+mod player;
+use player::PlayerPlugin;
+
 #[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-enum GameState {
+pub enum GameState {
     #[default]
     MainMenu,
     InGame,
@@ -20,6 +23,7 @@ fn main() {
             }),
             ..default()
         }))
+        .add_plugins(PlayerPlugin)
         .insert_resource(ClearColor(Color::srgb(0.04, 0.04, 0.06)))
         .init_state::<GameState>()
         .add_systems(Startup, setup_camera)
