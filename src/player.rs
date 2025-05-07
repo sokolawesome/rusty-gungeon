@@ -8,7 +8,14 @@ impl Plugin for PlayerPlugin {
         app.add_systems(OnEnter(GameState::InGame), spawn_player)
             .add_systems(
                 Update,
-                (player_movement_system, player_aiming_system).run_if(in_state(GameState::InGame)),
+                (
+                    player_movement_system,
+                    player_aiming_system,
+                    player_shooting_system,
+                    projectile_movement_system,
+                    projectile_lifetime_system,
+                )
+                    .run_if(in_state(GameState::InGame)),
             );
     }
 }
@@ -25,6 +32,28 @@ pub struct Health {
 #[derive(Component)]
 pub struct Speed(pub f32);
 
+#[derive(Component)]
+pub struct Weapon {
+    pub projectile_speed: f32,
+    pub projectile_damage: f32,
+}
+
+#[derive(Component)]
+pub struct Projectile {
+    pub direction: Vec2,
+    pub speed: f32,
+    pub lifetime: Timer,
+    pub damage: f32,
+}
+
+#[derive(Bundle)]
+pub struct ProjectileBundle {
+    data: Projectile,
+    sprite: Sprite,
+    transform: Transform,
+    visibility: Visibility,
+}
+
 #[derive(Bundle)]
 pub struct PlayerBundle {
     player_marker: Player,
@@ -33,6 +62,7 @@ pub struct PlayerBundle {
     sprite: Sprite,
     transform: Transform,
     visibility: Visibility,
+    weapon: Weapon,
 }
 
 impl Default for PlayerBundle {
@@ -51,6 +81,16 @@ impl Default for PlayerBundle {
             },
             transform: Transform::default(),
             visibility: Visibility::Visible,
+            weapon: Weapon::default(),
+        }
+    }
+}
+
+impl Default for Weapon {
+    fn default() -> Self {
+        Self {
+            projectile_speed: 600.0,
+            projectile_damage: 10.0,
         }
     }
 }
@@ -105,6 +145,61 @@ fn player_aiming_system(
                     }
                 }
             }
+        }
+    }
+}
+
+fn player_shooting_system(
+    mut commands: Commands,
+    mut player_query: Query<(&Transform, &mut Weapon), With<Player>>,
+    mouse_button_input: Res<ButtonInput<MouseButton>>,
+) {
+    if let Ok((player_transform, weapon)) = player_query.single_mut() {
+        if mouse_button_input.just_pressed(MouseButton::Left) {
+            let projectile_direction = player_transform.rotation * Vec3::X;
+
+            commands.spawn(ProjectileBundle {
+                data: Projectile {
+                    direction: projectile_direction.truncate().normalize_or_zero(),
+                    speed: weapon.projectile_speed,
+                    lifetime: Timer::from_seconds(2.0, TimerMode::Once),
+                    damage: weapon.projectile_damage,
+                },
+                sprite: Sprite {
+                    color: Color::WHITE,
+                    custom_size: Some(Vec2::new(10.0, 4.0)),
+                    ..default()
+                },
+                transform: Transform {
+                    translation: player_transform.translation + projectile_direction * 20.0,
+                    rotation: player_transform.rotation,
+                    scale: Vec3::ONE,
+                },
+                visibility: Visibility::Visible,
+            });
+        }
+    }
+}
+
+fn projectile_movement_system(
+    mut projectile_query: Query<(&mut Transform, &Projectile)>,
+    time: Res<Time>,
+) {
+    for (mut transform, projectile) in projectile_query.iter_mut() {
+        let movement = projectile.direction * projectile.speed * time.delta_secs();
+        transform.translation += Vec3::new(movement.x, movement.y, 0.0);
+    }
+}
+
+fn projectile_lifetime_system(
+    mut commands: Commands,
+    mut projectile_query: Query<(Entity, &mut Projectile)>,
+    time: Res<Time>,
+) {
+    for (entity, mut projectile) in projectile_query.iter_mut() {
+        projectile.lifetime.tick(time.delta());
+        if projectile.lifetime.finished() {
+            commands.entity(entity).despawn();
         }
     }
 }
