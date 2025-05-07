@@ -1,0 +1,53 @@
+version: "3"
+
+tasks:
+  default:
+    desc: "List all available tasks"
+    cmds:
+      - task --list-all
+
+  run:
+    desc: "Build and run the game in debug mode"
+    cmds:
+      - cargo run
+    aliases: [r]
+
+  dev:
+    desc: "Build and run the game with fast compilation options"
+    cmds:
+      - cargo run --features bevy/dynamic_linking
+    aliases: [d]
+
+  build:
+    desc: "Build the game in debug mode"
+    cmds:
+      - cargo build
+    aliases: [b]
+
+  release:
+    desc: "Build the game in release mode"
+    cmds:
+      - cargo build --release
+
+  check:
+    desc: "Quickly check the code for errors without full compilation"
+    cmds:
+      - cargo check
+    aliases: [c]
+
+  fmt:
+    desc: "Format the codebase using rustfmt"
+    cmds:
+      - cargo fmt --all
+    aliases: [f]
+
+  lint:
+    desc: "Lint the codebase using clippy"
+    cmds:
+      - cargo clippy --all-targets --all-features -- -D warnings
+    aliases: [l]
+
+  clean:
+    desc: "Clean build artifacts"
+    cmds:
+      - cargo clean
