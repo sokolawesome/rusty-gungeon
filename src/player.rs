@@ -1,5 +1,5 @@
 use crate::GameState;
-use bevy::prelude::*;
+use bevy::{prelude::*, window::PrimaryWindow};
 
 pub struct PlayerPlugin;
 
@@ -8,7 +8,7 @@ impl Plugin for PlayerPlugin {
         app.add_systems(OnEnter(GameState::InGame), spawn_player)
             .add_systems(
                 Update,
-                player_movement_system.run_if(in_state(GameState::InGame)),
+                (player_movement_system, player_aiming_system).run_if(in_state(GameState::InGame)),
             );
     }
 }
@@ -83,6 +83,28 @@ fn player_movement_system(
         if direction.length_squared() > 0.0 {
             direction = direction.normalize();
             transform.translation += direction * speed.0 * time.delta_secs();
+        }
+    }
+}
+
+fn player_aiming_system(
+    mut player_query: Query<&mut Transform, With<Player>>,
+    window_query: Query<&Window, With<PrimaryWindow>>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+) {
+    if let Ok(mut player_transform) = player_query.single_mut() {
+        if let Ok(primary_window) = window_query.single() {
+            if let Some(cursor_position) = primary_window.cursor_position() {
+                if let Ok((camera, camera_global_transform)) = camera_query.single() {
+                    if let Ok(world_position) =
+                        camera.viewport_to_world_2d(camera_global_transform, cursor_position)
+                    {
+                        let direction = world_position - player_transform.translation.truncate();
+                        let angle = direction.y.atan2(direction.x);
+                        player_transform.rotation = Quat::from_rotation_z(angle)
+                    }
+                }
+            }
         }
     }
 }
