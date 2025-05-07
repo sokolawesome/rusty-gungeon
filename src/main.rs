@@ -5,8 +5,8 @@ use player::PlayerPlugin;
 
 #[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum GameState {
-    #[default]
     MainMenu,
+    #[default]
     InGame,
     Paused,
     GameOver,
