@@ -149,7 +149,7 @@ impl Plugin for ArenaPlugin {
     }
 }
 
-fn setup_arena(mut commands: Commands) {
+pub fn setup_arena(mut commands: Commands) {
     let arena_grid = ArenaGrid::new(ARENA_WIDTH_TILES, ARENA_HEIGHT_TILES);
 
     let total_arena_width_pixels = ARENA_WIDTH_TILES as f32 * TILE_SIZE;
