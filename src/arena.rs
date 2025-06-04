@@ -41,14 +41,14 @@ impl ArenaGrid {
         let mut grid = vec![vec![TileType::Floor; width]; height];
         let perlin = Perlin::new(rng().random());
 
-        for y in 0..height {
-            for x in 0..width {
+        for (y, row) in grid.iter_mut().enumerate() {
+            for (x, cell) in row.iter_mut().enumerate() {
                 let noise_val = perlin.get([x as f64 * NOISE_SCALE, y as f64 * NOISE_SCALE]);
 
                 if noise_val > NOISE_THRESHOLD {
-                    grid[y][x] = TileType::Wall;
+                    *cell = TileType::Wall;
                 } else {
-                    grid[y][x] = TileType::Floor;
+                    *cell = TileType::Floor;
                 }
             }
         }
@@ -63,23 +63,32 @@ impl ArenaGrid {
                         if wall_neighbors < FLOOR_CONVERSION_THRESHOLD {
                             next_grid[y][x] = TileType::Floor;
                         }
-                    } else {
-                        if wall_neighbors >= WALL_CONVERSION_THRESHOLD {
-                            next_grid[y][x] = TileType::Wall;
-                        }
+                    } else if wall_neighbors >= WALL_CONVERSION_THRESHOLD {
+                        next_grid[y][x] = TileType::Wall;
                     }
                 }
             }
             grid = next_grid;
         }
 
-        for x in 0..width {
-            grid[0][x] = TileType::Wall;
-            grid[height - 1][x] = TileType::Wall;
+        if height > 0 {
+            for cell in grid[0].iter_mut() {
+                *cell = TileType::Wall;
+            }
+            if height > 1 {
+                for cell in grid[height - 1].iter_mut() {
+                    *cell = TileType::Wall;
+                }
+            }
         }
-        for y in 0..height {
-            grid[y][0] = TileType::Wall;
-            grid[y][width - 1] = TileType::Wall;
+
+        if width > 0 {
+            for row in grid.iter_mut() {
+                row[0] = TileType::Wall;
+                if width > 1 {
+                    row[width - 1] = TileType::Wall;
+                }
+            }
         }
 
         let center_x = width / 2;
@@ -105,7 +114,7 @@ impl ArenaGrid {
 }
 
 fn count_wall_neighbors(
-    grid: &Vec<Vec<TileType>>,
+    grid: &[Vec<TileType>],
     x: usize,
     y: usize,
     width: usize,

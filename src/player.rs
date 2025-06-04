@@ -1,11 +1,12 @@
 use crate::GameState;
+use crate::arena::{ARENA_HEIGHT_TILES, ARENA_WIDTH_TILES, ArenaGrid, TILE_SIZE, TileType};
 use bevy::{prelude::*, window::PrimaryWindow};
 
 pub struct PlayerPlugin;
 
 const PLAYER_DEFAULT_HEALTH: f32 = 100.0;
-const PLAYER_DEFAULT_SPEED: f32 = 250.0;
-const PLAYER_SPRITE_SIZE: f32 = 16.0;
+const PLAYER_DEFAULT_SPEED: f32 = 150.0;
+const PLAYER_SPRITE_SIZE: f32 = 10.0;
 
 const WEAPON_DEFAULT_PROJECTILE_SPEED: f32 = 600.0;
 const WEAPON_DEFAULT_PROJECTILE_DAMAGE: f32 = 10.0;
@@ -111,12 +112,25 @@ fn spawn_player(mut commands: Commands) {
     commands.spawn(PlayerBundle::default());
 }
 
+fn check_aabb_collision(pos1: Vec2, size1: Vec2, pos2: Vec2, size2: Vec2) -> bool {
+    let half_size1 = size1 / 2.0;
+    let half_size2 = size2 / 2.0;
+
+    let min1 = pos1 - half_size1;
+    let max1 = pos1 + half_size1;
+    let min2 = pos2 - half_size2;
+    let max2 = pos2 + half_size2;
+
+    (min1.x < max2.x && max1.x > min2.x) && (min1.y < max2.y && max1.y > min2.y)
+}
+
 fn player_movement_system(
-    mut player_query: Query<(&mut Transform, &Speed), With<Player>>,
+    mut player_query: Query<(&mut Transform, &Speed, &Sprite), With<Player>>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
+    arena_grid: Res<ArenaGrid>,
 ) {
-    if let Ok((mut transform, speed)) = player_query.single_mut() {
+    if let Ok((mut transform, speed, player)) = player_query.single_mut() {
         let mut direction = Vec3::ZERO;
 
         if keyboard_input.pressed(KeyCode::KeyW) || keyboard_input.pressed(KeyCode::ArrowUp) {
@@ -134,9 +148,94 @@ fn player_movement_system(
 
         if direction.length_squared() > 0.0 {
             direction = direction.normalize();
-            transform.translation += direction * speed.0 * time.delta_secs();
+
+            let move_amount = direction * speed.0 * time.delta_secs();
+
+            let player_size = player
+                .custom_size
+                .unwrap_or(Vec2::splat(PLAYER_SPRITE_SIZE));
+
+            let current_pos = transform.translation.truncate();
+
+            let next_pos_x = current_pos + Vec2::new(move_amount.x, 0.0);
+            let mut collision_x = false;
+            if move_amount.x != 0.0 {
+                for wall_pos_world in
+                    get_nearby_wall_positions_world(&next_pos_x, player_size, &arena_grid)
+                {
+                    if check_aabb_collision(
+                        next_pos_x,
+                        player_size,
+                        wall_pos_world,
+                        Vec2::splat(TILE_SIZE),
+                    ) {
+                        collision_x = true;
+                        break;
+                    }
+                }
+            }
+            if !collision_x {
+                transform.translation.x += move_amount.x;
+            }
+
+            let current_pos_after_x_move = transform.translation.truncate();
+            let next_pos_y = current_pos_after_x_move + Vec2::new(0.0, move_amount.y);
+            let mut collision_y = false;
+            if move_amount.y != 0.0 {
+                for wall_pos_world in
+                    get_nearby_wall_positions_world(&next_pos_y, player_size, &arena_grid)
+                {
+                    if check_aabb_collision(
+                        next_pos_y,
+                        player_size,
+                        wall_pos_world,
+                        Vec2::splat(TILE_SIZE),
+                    ) {
+                        collision_y = true;
+                        break;
+                    }
+                }
+            }
+            if !collision_y {
+                transform.translation.y += move_amount.y;
+            }
         }
     }
+}
+
+fn get_nearby_wall_positions_world(
+    player_pos_world: &Vec2,
+    player_size: Vec2,
+    arena_grid: &Res<ArenaGrid>,
+) -> Vec<Vec2> {
+    let mut wall_positions = Vec::new();
+
+    let total_arena_width_pixels = ARENA_WIDTH_TILES as f32 * TILE_SIZE;
+    let total_arena_height_pixels = ARENA_HEIGHT_TILES as f32 * TILE_SIZE;
+    let arena_offset_x = -total_arena_width_pixels / 2.0;
+    let arena_offset_y = -total_arena_height_pixels / 2.0;
+
+    let player_half_size = player_size / 2.0;
+    let search_min_world = *player_pos_world - player_half_size - Vec2::splat(TILE_SIZE);
+    let search_max_world = *player_pos_world + player_half_size + Vec2::splat(TILE_SIZE);
+
+    let start_x_grid = ((search_min_world.x - arena_offset_x) / TILE_SIZE).floor() as i32;
+    let end_x_grid = ((search_max_world.x - arena_offset_x) / TILE_SIZE).ceil() as i32;
+    let start_y_grid = ((search_min_world.y - arena_offset_y) / TILE_SIZE).floor() as i32;
+    let end_y_grid = ((search_max_world.y - arena_offset_y) / TILE_SIZE).ceil() as i32;
+
+    for gy in start_y_grid.max(0)..=end_y_grid.min(ARENA_HEIGHT_TILES as i32 - 1) {
+        for gx in start_x_grid.max(0)..=end_x_grid.min(ARENA_WIDTH_TILES as i32 - 1) {
+            let gy_usize = gy as usize;
+            let gx_usize = gx as usize;
+            if arena_grid.grid[gy_usize][gx_usize] == TileType::Wall {
+                let wall_world_x = gx_usize as f32 * TILE_SIZE + arena_offset_x + TILE_SIZE / 2.0;
+                let wall_world_y = gy_usize as f32 * TILE_SIZE + arena_offset_y + TILE_SIZE / 2.0;
+                wall_positions.push(Vec2::new(wall_world_x, wall_world_y));
+            }
+        }
+    }
+    wall_positions
 }
 
 fn player_aiming_system(
