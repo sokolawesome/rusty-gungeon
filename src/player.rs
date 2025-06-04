@@ -8,13 +8,13 @@ const PLAYER_DEFAULT_HEALTH: f32 = 100.0;
 const PLAYER_DEFAULT_SPEED: f32 = 150.0;
 const PLAYER_SPRITE_SIZE: f32 = 10.0;
 
-const WEAPON_DEFAULT_PROJECTILE_SPEED: f32 = 600.0;
+const WEAPON_DEFAULT_PROJECTILE_SPEED: f32 = 400.0;
 const WEAPON_DEFAULT_PROJECTILE_DAMAGE: f32 = 10.0;
 
 const PROJECTILE_SPRITE_WIDTH: f32 = 10.0;
 const PROJECTILE_SPRITE_HEIGHT: f32 = 4.0;
 const PROJECTILE_LIFETIME_SECONDS: f32 = 2.0;
-const PROJECTILE_SPAWN_OFFSET: f32 = 20.0;
+const PROJECTILE_SPAWN_OFFSET: f32 = 5.0;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
@@ -204,8 +204,8 @@ fn player_movement_system(
 }
 
 fn get_nearby_wall_positions_world(
-    player_pos_world: &Vec2,
-    player_size: Vec2,
+    object_pos_world: &Vec2,
+    object_size: Vec2,
     arena_grid: &Res<ArenaGrid>,
 ) -> Vec<Vec2> {
     let mut wall_positions = Vec::new();
@@ -215,9 +215,9 @@ fn get_nearby_wall_positions_world(
     let arena_offset_x = -total_arena_width_pixels / 2.0;
     let arena_offset_y = -total_arena_height_pixels / 2.0;
 
-    let player_half_size = player_size / 2.0;
-    let search_min_world = *player_pos_world - player_half_size - Vec2::splat(TILE_SIZE);
-    let search_max_world = *player_pos_world + player_half_size + Vec2::splat(TILE_SIZE);
+    let object_half_size = object_size / 2.0;
+    let search_min_world = *object_pos_world - object_half_size - Vec2::splat(TILE_SIZE); //check
+    let search_max_world = *object_pos_world + object_half_size + Vec2::splat(TILE_SIZE); //check
 
     let start_x_grid = ((search_min_world.x - arena_offset_x) / TILE_SIZE).floor() as i32;
     let end_x_grid = ((search_max_world.x - arena_offset_x) / TILE_SIZE).ceil() as i32;
@@ -295,12 +295,39 @@ fn player_shooting_system(
 }
 
 fn projectile_movement_system(
-    mut projectile_query: Query<(&mut Transform, &Projectile)>,
+    mut commands: Commands,
+    mut projectile_query: Query<(Entity, &mut Transform, &Projectile, &Sprite)>,
     time: Res<Time>,
+    arena_grid: Res<ArenaGrid>,
 ) {
-    for (mut transform, projectile) in projectile_query.iter_mut() {
-        let movement = projectile.direction * projectile.speed * time.delta_secs();
-        transform.translation += Vec3::new(movement.x, movement.y, 0.0);
+    for (entity, mut transform, projectile_data, projectile_sprite) in projectile_query.iter_mut() {
+        let movement_vector = projectile_data.direction * projectile_data.speed * time.delta_secs();
+        let next_pos_2d = transform.translation.truncate() + movement_vector;
+
+        let projectile_size = projectile_sprite
+            .custom_size
+            .unwrap_or(Vec2::new(PROJECTILE_SPRITE_WIDTH, PROJECTILE_SPRITE_HEIGHT));
+
+        let mut collision_detected = false;
+        for wall_pos_world in
+            get_nearby_wall_positions_world(&next_pos_2d, projectile_size, &arena_grid)
+        {
+            if check_aabb_collision(
+                next_pos_2d,
+                projectile_size,
+                wall_pos_world,
+                Vec2::splat(TILE_SIZE),
+            ) {
+                collision_detected = true;
+                break;
+            }
+        }
+
+        if collision_detected {
+            commands.entity(entity).despawn();
+        } else {
+            transform.translation += Vec3::new(movement_vector.x, movement_vector.y, 0.0);
+        }
     }
 }
 
