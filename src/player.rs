@@ -3,6 +3,18 @@ use bevy::{prelude::*, window::PrimaryWindow};
 
 pub struct PlayerPlugin;
 
+const PLAYER_DEFAULT_HEALTH: f32 = 100.0;
+const PLAYER_DEFAULT_SPEED: f32 = 250.0;
+const PLAYER_SPRITE_SIZE: f32 = 32.0;
+
+const WEAPON_DEFAULT_PROJECTILE_SPEED: f32 = 600.0;
+const WEAPON_DEFAULT_PROJECTILE_DAMAGE: f32 = 10.0;
+
+const PROJECTILE_SPRITE_WIDTH: f32 = 10.0;
+const PROJECTILE_SPRITE_HEIGHT: f32 = 4.0;
+const PROJECTILE_LIFETIME_SECONDS: f32 = 2.0;
+const PROJECTILE_SPAWN_OFFSET: f32 = 20.0;
+
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(OnEnter(GameState::InGame), spawn_player)
@@ -70,13 +82,13 @@ impl Default for PlayerBundle {
         Self {
             player_marker: Player,
             health: Health {
-                current: 100.0,
-                max: 100.0,
+                current: PLAYER_DEFAULT_HEALTH,
+                max: PLAYER_DEFAULT_HEALTH,
             },
-            speed: Speed(250.0),
+            speed: Speed(PLAYER_DEFAULT_SPEED),
             sprite: Sprite {
                 color: Color::srgb(0.25, 0.5, 0.75),
-                custom_size: Some(Vec2::new(32.0, 32.0)),
+                custom_size: Some(Vec2::splat(PLAYER_SPRITE_SIZE)),
                 ..default()
             },
             transform: Transform::default(),
@@ -89,8 +101,8 @@ impl Default for PlayerBundle {
 impl Default for Weapon {
     fn default() -> Self {
         Self {
-            projectile_speed: 600.0,
-            projectile_damage: 10.0,
+            projectile_speed: WEAPON_DEFAULT_PROJECTILE_SPEED,
+            projectile_damage: WEAPON_DEFAULT_PROJECTILE_DAMAGE,
         }
     }
 }
@@ -139,9 +151,10 @@ fn player_aiming_system(
                     if let Ok(world_position) =
                         camera.viewport_to_world_2d(camera_global_transform, cursor_position)
                     {
-                        let direction = world_position - player_transform.translation.truncate();
-                        let angle = direction.y.atan2(direction.x);
-                        player_transform.rotation = Quat::from_rotation_z(angle)
+                        let direction_to_cursor =
+                            world_position - player_transform.translation.truncate();
+                        let angle = direction_to_cursor.y.atan2(direction_to_cursor.x);
+                        player_transform.rotation = Quat::from_rotation_z(angle);
                     }
                 }
             }
@@ -151,27 +164,28 @@ fn player_aiming_system(
 
 fn player_shooting_system(
     mut commands: Commands,
-    mut player_query: Query<(&Transform, &mut Weapon), With<Player>>,
+    player_query: Query<(&Transform, &Weapon), With<Player>>,
     mouse_button_input: Res<ButtonInput<MouseButton>>,
 ) {
-    if let Ok((player_transform, weapon)) = player_query.single_mut() {
+    if let Ok((player_transform, weapon)) = player_query.single() {
         if mouse_button_input.just_pressed(MouseButton::Left) {
-            let projectile_direction = player_transform.rotation * Vec3::X;
+            let projectile_direction_3d = player_transform.rotation * Vec3::X;
 
             commands.spawn(ProjectileBundle {
                 data: Projectile {
-                    direction: projectile_direction.truncate().normalize_or_zero(),
+                    direction: projectile_direction_3d.truncate(),
                     speed: weapon.projectile_speed,
-                    lifetime: Timer::from_seconds(2.0, TimerMode::Once),
+                    lifetime: Timer::from_seconds(PROJECTILE_LIFETIME_SECONDS, TimerMode::Once),
                     damage: weapon.projectile_damage,
                 },
                 sprite: Sprite {
                     color: Color::WHITE,
-                    custom_size: Some(Vec2::new(10.0, 4.0)),
+                    custom_size: Some(Vec2::new(PROJECTILE_SPRITE_WIDTH, PROJECTILE_SPRITE_HEIGHT)),
                     ..default()
                 },
                 transform: Transform {
-                    translation: player_transform.translation + projectile_direction * 20.0,
+                    translation: player_transform.translation
+                        + projectile_direction_3d * PROJECTILE_SPAWN_OFFSET,
                     rotation: player_transform.rotation,
                     scale: Vec3::ONE,
                 },
